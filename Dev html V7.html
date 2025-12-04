@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>Dev html++ (Clean & Stable)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.15/lib/codemirror.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.15/theme/dracula.min.css">
+<style>
+  /* --- 全局變數 --- */
+  :root {
+    --base-font-size: 14px; 
+    --ui-font: clamp(13px, 1vw + 10px, 16px);
+    --ui-pad-y: clamp(4px, 0.8vh, 8px);
+    --ui-pad-x: clamp(8px, 1.5vw, 16px);
+    --ui-radius: clamp(4px, 1vw, 8px);
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+  
+  body { 
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; 
+    background:#121212; 
+    color:#fff; 
+    height: 100vh; 
+    height: 100dvh; 
+    overflow:hidden; 
+    touch-action: manipulation; 
+  }
+    
+  .browser-container { 
+    margin: clamp(0px, 2vw, 20px); 
+    height: calc(100vh - clamp(0px, 4vw, 40px)); 
+    height: calc(100dvh - clamp(0px, 4vw, 40px)); 
+    background:#1e1e1e; 
+    border-radius: var(--ui-radius); 
+    overflow:hidden; 
+    box-shadow:0 20px 40px rgba(0,0,0,0.4); 
+    display:flex; 
+    flex-direction:column;
+    position: relative; 
+  }
+  
+  /* 全螢幕模式 */
+  body.fullscreen-mode .browser-container {
+      margin: 0;
+      border-radius: 0;
+      height: 100vh;
+      height: 100dvh;
+  }
+    
+  /* --- 分頁列 --- */
+  .tabs { 
+    display:flex; 
+    background:#2c2c2c; 
+    border-bottom:1px solid #444; 
+    padding:4px; 
+    overflow-x:auto; 
+    scrollbar-width: none; 
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+
+  .tab { 
+    display:flex; 
+    align-items:center; 
+    padding: var(--ui-pad-y) var(--ui-pad-x);
+    margin-right:2px; 
+    cursor:pointer; 
+    border-radius: var(--ui-radius) var(--ui-radius) 0 0; 
+    background:#333; 
+    font-size: var(--ui-font); 
+    position:relative; 
+    color:#ccc; 
+    flex-shrink:0; 
+    user-select: none; 
+    transition: background 0.2s;
+    will-change: opacity, background, transform;
+  }
+  .tab.active { background:#1e1e1e; font-weight:600; color:#fff; }
+  .tab .close-btn { margin-left:8px; color:#fff; cursor:pointer; font-weight:bold; padding: 0 4px; opacity: 0.7; }
+  .tab .close-btn:hover { color:#ff5555; opacity: 1; }
+    
+  .tab input { 
+    background:#000; 
+    border:1px solid #6272a4; 
+    color:#fff; 
+    font-weight:600; 
+    font-size: var(--ui-font);
+    width: clamp(80px, 15vw, 150px); 
+    padding: 2px 4px; 
+    border-radius: 4px; 
+  }
+  .tab input:focus { outline:none; }
+
+  .editor-container { 
+    position:relative; 
+    flex:1; 
+    overflow:hidden; 
+    padding-bottom:0;
+  }
+    
+  .CodeMirror { 
+    position:absolute; 
+    top:0; 
+    bottom:0; 
+    left:0; 
+    right:0; 
+    height: 100% !important; 
+    overflow: hidden; 
+    font-size: var(--base-font-size); 
+    line-height: 1.6;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* 強制由左至右 (防止阿拉伯文排版錯誤) */
+  .CodeMirror pre, .CodeMirror span {
+      direction: ltr !important;
+      unicode-bidi: isolate !important;
+      text-align: left !important;
+  }
+
+  /* --- 工具列 --- */
+  .toolbar { 
+    display:flex; 
+    padding: var(--ui-pad-y); 
+    background:#2c2c2c; 
+    gap: clamp(4px, 1vw, 8px); 
+    border-bottom:1px solid #444; 
+    position:sticky; 
+    top:0; 
+    z-index:10; 
+    flex-wrap:wrap; 
+    align-items:center; 
+  }
+
+  .run-btn { 
+    padding: var(--ui-pad-y) var(--ui-pad-x);
+    font-size: var(--ui-font);
+    border:none; 
+    border-radius: var(--ui-radius);
+    background:#000; 
+    color:#fff; 
+    cursor:pointer; 
+    font-weight:600; 
+    flex-shrink:0; 
+    box-shadow:0 2px 4px rgba(0,0,0,0.5); 
+    transition: all 0.2s; 
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .run-btn:hover { box-shadow:0 4px 8px rgba(0,0,0,0.7); transform: translateY(-1px); }
+  .run-btn:active { transform: translateY(1px); }
+  
+  #newTabBtn { background:#6272a4; padding: var(--ui-pad-y) var(--ui-pad-x); border:none; border-radius:var(--ui-radius); color:#fff; cursor:pointer; font-weight:600;}
+    
+  .CodeMirror::-webkit-scrollbar { width:10px; height:10px; }
+  .CodeMirror::-webkit-scrollbar-track { background:#1e1e1e; }
+  .CodeMirror::-webkit-scrollbar-thumb { background:#6272a4; border-radius:5px; }
+  .CodeMirror::-webkit-scrollbar-thumb:hover { background:#50fa7b; }
+    
+  .search-bar { 
+    display:flex; 
+    align-items:center; 
+    gap:4px; 
+    flex: 1; 
+    min-width: 200px; 
+    justify-content: flex-end; 
+    position: relative;
+  }
+    
+  .search-input {
+    background:#1e1e1e; 
+    color:#fff; 
+    border:1px solid #444; 
+    border-radius: var(--ui-radius);
+    padding: var(--ui-pad-y) var(--ui-pad-x);
+    padding-right: 60px; 
+    font-size: var(--ui-font);
+    width: 100%; 
+    min-width: 80px;
+  }
+  .search-input:focus { outline:none; border-color:#6272a4; }
+    
+  .search-count {
+    position: absolute;
+    right: 120px; 
+    font-size: 12px;
+    color: #888;
+    pointer-events: none; 
+    background: rgba(30,30,30,0.8);
+    padding: 0 4px;
+    border-radius: 4px;
+  }
+
+  .save-status {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #555;
+      margin-left: 8px;
+      transition: background 0.3s;
+  }
+  .save-status.saving { background: #f1fa8c; box-shadow: 0 0 5px #f1fa8c; }
+  .save-status.saved { background: #50fa7b; }
+
+  /* 搜尋高亮樣式 */
+  .cm-searching { background: rgba(255, 255, 0, 0.4); border-bottom: 1px solid yellow; }
+  .cm-active-search { background: rgba(255, 165, 0, 0.8) !important; color: #000 !important; outline: 2px solid #fff;}
+
+  @media (max-width:500px){
+    .browser-container { margin: 0; border-radius: 0; height: 100vh; height: 100dvh; }
+    .toolbar { row-gap: 8px; } 
+    .search-bar { order: 99; flex-basis: 100%; }
+    .search-count { right: 125px; } 
+  }
+
+  .tab.dragging { opacity: 0.4; background: #555; transform: scale(0.95); }
+
+  /* Iframe Overlay */
+  #previewOverlay {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: #fff;
+      z-index: 100;
+      display: none;
+      flex-direction: column;
+  }
+  #previewToolbar {
+      background: #2c2c2c;
+      padding: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #444;
+      flex-shrink: 0;
+  }
+  #previewTitle { font-weight: bold; color: #fff; font-size: 14px; }
+  #closePreviewBtn {
+    background-color: #000000;
+    color: white;
+    border: none;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, color 0.2s;
+}
+
+  #previewFrame {
+      flex: 1;
+      border: none;
+      width: 100%;
+      height: 100%;
+      background: #fff; 
+  }
+</style>
+</head>
+<body>
+
+<div class="browser-container">
+  <div class="tabs" id="tabBar">
+    <button id="newTabBtn">＋</button>
+  </div>
+
+  <div class="toolbar">
+    <button class="run-btn" onclick="editorUndo()" title="復原 (Undo)">⟲</button>
+    <button class="run-btn" onclick="editorRedo()" title="重做 (Redo)">⟳</button>
+    
+    <button class="run-btn" onclick="formatCode()" title="排版程式碼">排版</button>
+    
+    <button class="run-btn" onclick="changeFontSize(1)" title="放大字體">A+</button>
+    <button class="run-btn" onclick="changeFontSize(-1)" title="縮小字體">A-</button>
+
+    <button class="run-btn" onclick="insertTemplate()" title="插入 HTML5 骨架">模板</button>
+
+    <div style="height:20px; border-right:1px solid #555; margin:0 4px;"></div>
+
+    <button class="run-btn" onclick="openFile()">開啟</button>
+    <button class="run-btn" onclick="downloadHTML()">下載</button>
+    <button class="run-btn" onclick="copyHTML()">複製</button>
+    <button class="run-btn" onclick="pasteHTML()">貼上</button>
+    <button class="run-btn" onclick="clearHTML()">清空</button>
+	<button class="run-btn" onclick="runHTML()">執行</button>
+    
+    <label style="display:flex;align-items:center;font-size:12px;margin-left:4px;cursor:pointer;user-select:none;">
+        <input type="checkbox" id="useConsole" checked style="margin-right:4px;"> 
+        Shell
+    </label>
+
+    <div style="height:20px; border-right:1px solid #555; margin:0 4px;"></div>
+
+    <div id="saveStatus" class="save-status" title="存檔狀態"></div>
+    <input type="file" id="fileInput" style="display:none" accept=".html,.css,.js,.txt,.json,.md,.htm">
+
+    <div class="search-bar">
+      <input type="text" id="searchInput" class="search-input" placeholder="搜尋..." autocomplete="off">
+      <span id="searchCount" class="search-count"></span>
+      <button class="run-btn" onclick="findPrev()">↑</button>
+      <button class="run-btn" onclick="findNext()">↓</button>
+      
+      <button class="run-btn" onclick="toggleFullScreen()" title="全螢幕" style="margin-left:4px;">⛶</button>
+    </div>
+  </div>
+
+  <div class="editor-container">
+    <div id="editorWrapper"></div>
+  </div>
+
+  <div id="previewOverlay">
+      <div id="previewToolbar">
+          <span id="previewTitle">Preview Output</span>
+          <button id="closePreviewBtn" onclick="closePreview()">✕</button>
+      </div>
+      <iframe id="previewFrame"></iframe>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.15/lib/codemirror.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.15/addon/search/searchcursor.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.15/addon/edit/closebrackets.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.15/addon/edit/closetag.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.15/addon/fold/xml-fold.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.15/addon/edit/matchtags.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.15/mode/htmlmixed/htmlmixed.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.15/mode/javascript/javascript.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.15/mode/css/css.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.15/mode/xml/xml.js"></script>
+
+<script>
+// ✨ 全局變數
+let tabs = [];
+let currentTab = -1;
+const editorWrapper = document.getElementById("editorWrapper");
+const searchInput = document.getElementById("searchInput");
+const searchCount = document.getElementById("searchCount");
+const tabBar = document.getElementById("tabBar");
+const saveStatus = document.getElementById("saveStatus");
+let searchCursor = null;
+
+// ✨ 拖曳相關變數
+let isDraggingMobile = false;
+let draggedTab = null;
+let touchTimer = null;
+let startX = 0;
+let startY = 0;
+const DRAG_THRESHOLD = 10; 
+
+const isAndroid = /Android/i.test(navigator.userAgent);
+
+// ✨ 字體大小變數
+let currentFontSize = 14;
+
+// --- 預覽視窗控制 ---
+const previewOverlay = document.getElementById("previewOverlay");
+const previewFrame = document.getElementById("previewFrame");
+
+async function closePreview() {
+    try {
+        const win = previewFrame.contentWindow;
+        if (win && win.__errorBuffer && win.__errorBuffer.length > 0) {
+            const errorText = win.__errorBuffer.join('\n');
+            await navigator.clipboard.writeText(errorText);
+            alert(`已自動複製 ${win.__errorBuffer.length} 條不重複的錯誤訊息！`);
+        }
+    } catch (e) {}
+    previewOverlay.style.display = "none";
+    previewFrame.srcdoc = "";
+}
+
+function runHTML(){
+  if(currentTab<0) return;
+  let html = tabs[currentTab].editor.getValue();
+  const useConsole = document.getElementById("useConsole").checked;
+  html += getMinimalErrorLoggerScript();
+  if (useConsole) { html += getConsoleScript(); }
+  previewOverlay.style.display = "flex";
+  const doc = previewFrame.contentDocument || previewFrame.contentWindow.document;
+  doc.open();
+  doc.write(html);
+  doc.close();
+}
+
+function getMinimalErrorLoggerScript() {
+  return `
+  <script>
+    (function(){
+        if (!window.__errorBuffer) { window.__errorBuffer = []; }
+        const originalError = console.error;
+        console.error = function(...args) {
+            try {
+                const errorStr = args.map(a => {
+                    if (a instanceof Error) return a.stack || a.message;
+                    if (typeof a === 'object') return JSON.stringify(a);
+                    return String(a);
+                }).join(' ');
+                if (errorStr && !window.__errorBuffer.includes(errorStr)) {
+                    window.__errorBuffer.push(errorStr);
+                }
+            } catch(e) {} 
+            originalError.apply(console, args);
+        };
+        const originalOnError = window.onerror;
+        window.onerror = function(msg, url, line, col, error) { 
+            const errorStr = msg + ' (Line: ' + line + ')';
+            if (!window.__errorBuffer.includes(errorStr)) {
+                window.__errorBuffer.push(errorStr);
+            }
+            if (originalOnError) { return originalOnError.apply(window, arguments); }
+            return false; 
+        };
+        window.addEventListener('unhandledrejection', function(event) {
+            const errorStr = 'Unhandled Promise Rejection: ' + (event.reason ? (event.reason.stack || event.reason) : 'Unknown');
+            if (!window.__errorBuffer.includes(errorStr)) { window.__errorBuffer.push(errorStr); }
+        });
+    })();
+  <\/script>
+  `;
+}
+
+function getConsoleScript() {
+  return `
+  <div id="v-console-container" style="position:fixed;bottom:0;left:0;right:0;height:220px;background:#1e1e1e;color:#fff;z-index:999999;border-top:2px solid #6272a4;display:flex;flex-direction:column;font-family:monospace;font-size:13px;transition:transform 0.3s;transform:translateY(0);">
+    <div style="background:#2c2c2c;height:32px;padding:0 8px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #444;flex-shrink:0;white-space:nowrap;overflow:hidden;">
+        <span style="color: white;font-weight:bold;">Console Output</span>
+        <div style="display:flex;align-items:center;">
+            <button onclick="document.getElementById('v-console-logs').innerHTML=''" style="background:#444;color:#fff;border:none;padding:2px 8px;cursor:pointer;margin-right:8px;border-radius:4px;height:24px;display:flex;align-items:center;">Clear</button>
+            <button onclick="document.getElementById('v-console-container').style.transform='translateY(185px)'" style="background:#444;color:#fff;border:none;padding:0 8px;cursor:pointer;border-radius:4px;height:24px;display:flex;align-items:center;">↓</button>
+            <button onclick="document.getElementById('v-console-container').style.transform='translateY(0)'" style="background:#444;color:#fff;border:none;padding:0 8px;cursor:pointer;border-radius:4px;margin-left:4px;height:24px;display:flex;align-items:center;">↑</button>
+        </div>
+    </div>
+    <div id="v-console-logs" style="flex:1;overflow-y:auto;padding:8px;background:rgba(0,0,0,0.3);"></div>
+    <div style="border-top:1px solid #444;display:flex;background:#2c2c2c;padding:4px;flex-shrink:0;">
+        <span style="color:#50fa7b;margin-right:4px;font-weight:bold;">&gt;</span>
+        <input type="text" id="v-console-input" autocomplete="off" placeholder="Run JS..." style="flex:1;background:transparent;border:none;color:#fff;font-family:monospace;outline:none;">
+    </div>
+  </div>
+  <script>
+    (function(){
+        if (!window.__errorBuffer) { window.__errorBuffer = []; }
+        const logContainer = document.getElementById('v-console-logs');
+        const input = document.getElementById('v-console-input');
+        function formatArg(arg) {
+            if (arg === null) return 'null';
+            if (arg === undefined) return 'undefined';
+            if (typeof arg === 'object') { try { return JSON.stringify(arg, null, 2); } catch(e) { return String(arg); } }
+            return String(arg);
+        }
+        function appendLog(type, args) {
+            const div = document.createElement('div');
+            div.style.borderBottom = '1px solid #333';
+            div.style.padding = '2px 0';
+            div.style.wordBreak = 'break-all';
+            if(type === 'error') div.style.color = '#ff5555';
+            else if(type === 'warn') div.style.color = '#f1fa8c';
+            else if(type === 'command') div.style.color = '#8be9fd';
+            else if(type === 'result') div.style.color = '#bd93f9';
+            else div.style.color = '#f8f8f2';
+            let msgContent = args.map(formatArg).join(' ');
+            if (type === 'error') { if (!window.__errorBuffer.includes(msgContent)) { window.__errorBuffer.push(msgContent); } }
+            let msg = '';
+            if (type === 'command') msg = '> ' + args[0];
+            else if (type === 'result') msg = '< ' + formatArg(args[0]);
+            else msg = '[' + type.toUpperCase() + '] ' + msgContent;
+            div.textContent = msg;
+            logContainer.appendChild(div);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+        const originalLog = console.log;
+        const originalError = console.error;
+        const originalWarn = console.warn;
+        console.log = function(...args) { appendLog('log', args); originalLog.apply(console, args); };
+        console.error = function(...args) { appendLog('error', args); originalError.apply(console, args); };
+        console.warn = function(...args) { appendLog('warn', args); originalWarn.apply(console, args); };
+        let cmdHistory = []; let historyIdx = -1;
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                const cmd = this.value; if (!cmd) return;
+                cmdHistory.push(cmd); historyIdx = cmdHistory.length;
+                appendLog('command', [cmd]);
+                try { const result = window.eval(cmd); appendLog('result', [result]); } catch (err) { appendLog('error', [err]); }
+                this.value = '';
+            } else if (e.key === 'ArrowUp') {
+                if (historyIdx > 0) { historyIdx--; this.value = cmdHistory[historyIdx]; }
+            } else if (e.key === 'ArrowDown') {
+                if (historyIdx < cmdHistory.length - 1) { historyIdx++; this.value = cmdHistory[historyIdx]; }
+                else { historyIdx = cmdHistory.length; this.value = ''; }
+            }
+        });
+    })();
+  <\/script>
+  `;
+}
+
+// --- IndexedDB & Storage ---
+let db;
+const DB_NAME = "DevHtmlDB";
+const STORE_NAME = "tabs_v2"; 
+const DB_VERSION = 2; 
+
+function initDB() {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+        request.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (db.objectStoreNames.contains("tabs")) { db.deleteObjectStore("tabs"); }
+            if (!db.objectStoreNames.contains(STORE_NAME)) { db.createObjectStore(STORE_NAME, { keyPath: "id" }); }
+        };
+        request.onsuccess = (e) => { db = e.target.result; resolve(db); };
+        request.onerror = (e) => reject(e.target.error);
+    });
+}
+
+let saveTimer = null;
+function saveTabsToStorage() {
+    saveStatus.classList.remove("saved");
+    saveStatus.classList.add("saving");
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+        if (!db) return;
+        if (currentTab >= 0 && tabs[currentTab] && tabs[currentTab].editor) {
+            tabs[currentTab].content = tabs[currentTab].editor.getValue();
+            tabs[currentTab].history = tabs[currentTab].editor.getHistory();
+        }
+        const saveData = {
+            id: 'auto-save-session',
+            data: tabs.map(t => ({ name: t.name, content: t.content, history: t.history }))
+        };
+        const transaction = db.transaction([STORE_NAME], "readwrite");
+        const store = transaction.objectStore(STORE_NAME);
+        store.put(saveData).onsuccess = () => {
+            saveStatus.classList.remove("saving");
+            saveStatus.classList.add("saved");
+            setTimeout(() => saveStatus.classList.remove("saved"), 1000); 
+        };
+    }, 200); 
+}
+
+async function loadTabsFromStorage() {
+    try {
+        await initDB();
+        const transaction = db.transaction([STORE_NAME], "readonly");
+        const store = transaction.objectStore(STORE_NAME);
+        store.get('auto-save-session').onsuccess = (e) => {
+            const result = e.target.result;
+            if (result && result.data && result.data.length > 0) {
+                tabs = []; editorWrapper.innerHTML = ""; document.querySelectorAll(".tab").forEach(e => e.remove());
+                result.data.forEach(d => addTab(d.name, d.content, d.history, false));
+                switchTab(0);
+            } else {
+                addTab("Template", "<!DOCTYPE html>\n<html>\n<head>\n<title>My Page</title>\n<style>\n  body { color: white; background: #222; font-family: sans-serif; padding: 20px; }\n</style>\n</head>\n<body>\n  <h1>Hello World</h1>\n  <script>\n    console.log('Ready');\n  <\/script>\n</body>\n</html>", null);
+            }
+        };
+    } catch (err) { addTab("Error", "DB Fail"); }
+}
+
+function createEditor(content='', history=null){
+  const e = CodeMirror(editorWrapper,{
+    value: content, mode: 'htmlmixed', theme: 'dracula', lineNumbers: true, 
+    lineWrapping: true, // 預設強制換行
+    indentUnit: 4, tabSize: 4, indentWithTabs: true,
+    
+    // ✨✨✨ 減少輸入法干擾 ✨✨✨
+    inputStyle: 'contenteditable', 
+    spellcheck: false, autocorrect: false, autocapitalize: false,
+
+    smartIndent: false,   
+    electricChars: false, 
+    
+    autoCloseBrackets: isAndroid ? false : "()[]{}''\"\"", 
+    autoCloseTags: true, matchTags: {bothTags: true},
+    extraKeys: {
+        "Enter": (cm) => {
+            cm.replaceSelection("\n"); 
+            const prevLineText = cm.getLine(cm.getCursor().line - 1);
+            if (!prevLineText) return;
+            const match = prevLineText.match(/^\s*/);
+            if (match && match[0]) { cm.replaceSelection(match[0]); }
+        },
+        "'<'": isAndroid ? null : (cm) => { cm.replaceSelection("<>"); cm.setCursor(cm.getCursor().line, cm.getCursor().ch - 1); },
+        "'>'": isAndroid ? null : (cm) => handleGreaterThan(cm),
+        "'/'": isAndroid ? null : (cm) => handleSlash(cm)
+    }
+  });
+  if (history) { try { e.setHistory(history); } catch(err) { e.clearHistory(); } } else { e.clearHistory(); }
+
+  function handleGreaterThan(cm) {
+      const pos = cm.getCursor();
+      if (cm.getRange(pos, {line: pos.line, ch: pos.ch + 1}) === '>') {
+          cm.setCursor({line: pos.line, ch: pos.ch + 1}); setTimeout(() => checkAndCloseTag(cm), 0); return;
+      } return CodeMirror.Pass;
+  }
+  function handleSlash(cm) {
+      cm.replaceSelection("/"); setTimeout(() => {
+          const pos = cm.getCursor();
+          if (cm.getRange({line: pos.line, ch: pos.ch - 2}, {line: pos.line, ch: pos.ch - 1}) === "<") checkAndCloseTag(cm, true);
+      }, 0);
+  }
+  function checkAndCloseTag(cm, isSlashClose = false) {
+      const tok = cm.getTokenAt(cm.getCursor());
+      const inner = CodeMirror.innerMode(cm.getMode(), tok.state);
+      if (inner.mode.name !== "xml") return;
+      const tagName = inner.state.context && inner.state.context.tagName;
+      const voidTags = ["area","base","br","col","embed","hr","img","input","link","meta","param","source","track","wbr"];
+      if (tagName && !voidTags.includes(tagName)) {
+          if (isSlashClose) {
+              const pos = cm.getCursor();
+              if (cm.getRange(pos, {line: pos.line, ch: pos.ch + 1}) === ">") {
+                  cm.replaceSelection(tagName); cm.setCursor({line: pos.line, ch: pos.ch + tagName.length + 1});
+              } else cm.replaceSelection(tagName + ">");
+          } else {
+              cm.replaceSelection("</" + tagName + ">");
+              const c = cm.getCursor(); cm.setCursor(c.line, c.ch - (tagName.length + 3)); 
+          }
+      }
+  }
+
+  if (isAndroid) {
+      e.on("change", (cm, change) => {
+          if (change.origin !== "+input") return;
+          const text = change.text[0];
+          function androidPair(open, close) {
+             if (text === open) setTimeout(() => { const p = cm.getCursor(); cm.replaceRange(close, p); cm.setCursor(p); }, 0);
+             if (text === close) setTimeout(() => { const p = cm.getCursor(); if (cm.getRange(p, {line: p.line, ch: p.ch + 1}) === close) cm.replaceRange("", p, {line: p.line, ch: p.ch + 1}); }, 0);
+          }
+          androidPair("<", ">"); androidPair("(", ")"); androidPair("[", "]"); androidPair("{", "}");
+          
+          if (text === '"' || text === "'") {
+             setTimeout(() => { 
+                const p = cm.getCursor();
+                const nextChar = cm.getRange(p, {line: p.line, ch: p.ch + 1});
+                if (nextChar === text) {
+                    cm.replaceRange("", p, {line: p.line, ch: p.ch + 1});
+                } else {
+                    cm.replaceRange(text, p); 
+                    cm.setCursor(p); 
+                }
+             }, 0);
+          }
+          if (text === ">") setTimeout(() => checkAndCloseTag(cm, false), 0);
+          if (text === "/") setTimeout(() => { const p = cm.getCursor(); if (cm.getRange({line: p.line, ch: p.ch - 2}, {line: p.line, ch: p.ch - 1}) === "<") checkAndCloseTag(cm, true); }, 0);
+      });
+  }
+  e.on("change", (cm, change) => {
+      if (change.origin === "+rename") return; 
+      saveTabsToStorage();
+  });
+  return e;
+}
+
+// Tab Logic
+function addTab(name, content='', history=null, shouldSave = true){
+  if (name == null) { let i = 1; while (tabs.some(t => t.name === `Untitled ${i}`)) i++; name = `Untitled ${i}`; }
+  const bar=document.getElementById("tabBar");
+  const div=document.createElement("div"); div.className="tab"; div.draggable = true; 
+  const span=document.createElement("span"); span.textContent=name; div.appendChild(span);
+  const close=document.createElement("span"); close.className="close-btn"; close.textContent="✕"; div.appendChild(close);
+  const tab={name, element: div, editor:null, content, history};
+  tabs.push(tab);
+
+  function startRenaming() {
+    if(div.querySelector('input')) return;
+    const input = document.createElement("input"); input.type = "text"; input.value = span.textContent;
+    input.onclick = (e) => e.stopPropagation(); input.onblur = finishEdit;
+    input.onkeydown = (ev) => { if(ev.key==="Enter") finishEdit(); };
+    div.replaceChild(input, span); input.focus(); input.select();
+    function finishEdit(){ if(!input.parentNode) return; span.textContent = input.value || "未命名"; div.replaceChild(span, input); tab.name = span.textContent; saveTabsToStorage(); }
+  }
+  close.onclick=(e)=>{ e.stopPropagation(); closeTab(tabs.indexOf(tab)); };
+  div.onclick = () => { if (!isDraggingMobile) { if (currentTab === tabs.indexOf(tab)) startRenaming(); else switchTab(tabs.indexOf(tab)); } };
+  bar.insertBefore(div, document.getElementById("newTabBtn"));
+  if (shouldSave) { switchTab(tabs.length-1); saveTabsToStorage(); }
+}
+
+function switchTab(i){
+  if(currentTab>=0 && tabs[currentTab] && tabs[currentTab].editor){
+    tabs[currentTab].content = tabs[currentTab].editor.getValue();
+    tabs[currentTab].history = tabs[currentTab].editor.getHistory();
+    editorWrapper.innerHTML="";
+  }
+  currentTab=i; const t=tabs[i]; if(!t) return;
+  if(!t.editor) t.editor=createEditor(t.content, t.history);
+  editorWrapper.appendChild(t.editor.getWrapperElement());
+  t.editor.refresh(); t.editor.focus();
+  tabs.forEach((t,i)=>t.element.classList.toggle("active",i===currentTab));
+  refreshSearch();
+}
+
+function closeTab(i){
+  if(tabs[i].editor) tabs[i].content = tabs[i].editor.getValue();
+  tabs[i].element.remove(); tabs.splice(i,1);
+  if(currentTab===i) currentTab=-1,editorWrapper.innerHTML=""; else if(currentTab>i) currentTab--;
+  tabs.forEach((t,i)=>t.element.classList.toggle("active",i===currentTab));
+  if (tabs.length > 0 && currentTab === -1) switchTab(0);
+  saveTabsToStorage();
+}
+
+// ✨✨✨ 功能函式群 ✨✨✨
+
+// 0. 全螢幕
+function toggleFullScreen() {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen().then(() => {
+        document.body.classList.add('fullscreen-mode');
+    }).catch(err => { console.log(err.message); });
+  } else {
+    document.exitFullscreen();
+    document.body.classList.remove('fullscreen-mode');
+  }
+}
+
+// 1. 格式化代碼
+function formatCode() {
+  if (currentTab < 0) return;
+  const editor = tabs[currentTab].editor;
+  const totalLines = editor.lineCount();
+  editor.operation(() => {
+    for (let i = 0; i < totalLines; ++i) {
+      editor.indentLine(i, "smart");
+    }
+  });
+}
+
+// 2. 調整字體大小
+function changeFontSize(delta) {
+    currentFontSize += delta;
+    if (currentFontSize < 10) currentFontSize = 10;
+    if (currentFontSize > 30) currentFontSize = 30;
+    document.documentElement.style.setProperty('--base-font-size', currentFontSize + 'px');
+}
+
+// 3. 插入模板
+function insertTemplate() {
+    if (currentTab < 0) return;
+    const editor = tabs[currentTab].editor;
+    const template = `<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Document</title>
+<style>
+    body { background: #222; color: #fff; padding: 20px; font-family: sans-serif; }
+</style>
+</head>
+<body>
+
+    <h1>Hello</h1>
+    <script>
+        console.log("Hello");
+    <\/script>
+
+</body>
+</html>`;
+    if (editor.getValue().trim() === "" || confirm("要覆蓋當前內容嗎？")) {
+        editor.setValue(template);
+    }
+}
+
+function downloadHTML(){
+  if(currentTab<0) return;
+  const link=document.createElement('a');
+  link.href=URL.createObjectURL(new Blob([tabs[currentTab].editor.getValue()],{type:'text/html'}));
+  link.download = (tabs[currentTab].name || "download") + ".html";
+  link.click();
+}
+function copyHTML(){ if(currentTab>=0) navigator.clipboard.writeText(tabs[currentTab].editor.getValue()).then(()=>alert("Copied")); }
+function pasteHTML(){ if(currentTab>=0) navigator.clipboard.readText().then(text=>{ tabs[currentTab].editor.setValue(text); saveTabsToStorage(); }); }
+function clearHTML(){ if(currentTab>=0 && confirm("Clear?")) { tabs[currentTab].editor.setValue(""); saveTabsToStorage(); } }
+function editorUndo() { if(currentTab>=0) { tabs[currentTab].editor.undo(); tabs[currentTab].editor.focus(); } }
+function editorRedo() { if(currentTab>=0) { tabs[currentTab].editor.redo(); tabs[currentTab].editor.focus(); } }
+function openFile(){ document.getElementById("fileInput").click(); }
+
+document.getElementById("fileInput").onchange = (e) => {
+    const f = e.target.files[0]; 
+    if(!f) return;
+    const r = new FileReader(); 
+    r.onload = () => {
+        let name = f.name;
+        const idx = name.lastIndexOf('.');
+        if(idx > 0) name = name.substring(0, idx);
+        addTab(name, r.result);
+    }; 
+    r.readAsText(f); 
+    e.target.value="";
+};
+document.getElementById("newTabBtn").onclick=()=>addTab();
+
+let totalMatches = 0;
+let currentMatchIdx = 0;
+searchInput.addEventListener("input", refreshSearch);
+searchInput.addEventListener("keydown", function(e) {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    if (e.shiftKey) findPrev();
+    else findNext();
+  }
+});
+function refreshSearch(){
+  if(currentTab<0) return;
+  const editor=tabs[currentTab].editor;
+  const query=searchInput.value;
+  editor.operation(()=>{ editor.getAllMarks().forEach(m=>m.clear()); });
+  if(!query) { searchCursor=null; searchCount.textContent = ""; totalMatches = 0; currentMatchIdx = 0; return; }
+  editor.operation(()=>{
+    totalMatches = 0;
+    const cursor = editor.getSearchCursor(query);
+    while(cursor.findNext()){ totalMatches++; editor.markText(cursor.from(), cursor.to(), {className: "cm-searching"}); }
+    searchCursor = editor.getSearchCursor(query);
+    updateSearchUI(0);
+  });
+}
+function updateSearchUI(idx) {
+  currentMatchIdx = idx;
+  if (totalMatches > 0) { searchCount.textContent = `${currentMatchIdx}/${totalMatches}`; } 
+  else { searchCount.textContent = searchInput.value ? "0/0" : ""; }
+}
+function highlightCurrent(from, to) {
+  if(currentTab<0) return;
+  const editor=tabs[currentTab].editor;
+  editor.getAllMarks().forEach(m => { if(m.className === "cm-active-search") m.clear(); });
+  editor.markText(from, to, {className: "cm-active-search"});
+}
+function findNext(){
+  if(currentTab<0) return;
+  const editor=tabs[currentTab].editor;
+  const query=searchInput.value;
+  if(!query) return;
+  if(!searchCursor) searchCursor = editor.getSearchCursor(query);
+  let found = searchCursor.findNext();
+  if(!found) { searchCursor = editor.getSearchCursor(query); found = searchCursor.findNext(); }
+  if(found){
+    editor.setSelection(searchCursor.from(), searchCursor.to());
+    editor.scrollIntoView({from:searchCursor.from(), to:searchCursor.to()}, 20);
+    highlightCurrent(searchCursor.from(), searchCursor.to());
+    calculateCurrentIndex(editor, query, searchCursor.from());
+  }
+}
+function findPrev(){
+  if(currentTab<0) return;
+  const editor=tabs[currentTab].editor;
+  const query=searchInput.value;
+  if(!query) return;
+  if(!searchCursor) searchCursor = editor.getSearchCursor(query);
+  let found = searchCursor.findPrevious();
+  if(!found) { searchCursor = editor.getSearchCursor(query, {line: editor.lineCount(), ch: 0}); found = searchCursor.findPrevious(); }
+  if(found){
+    editor.setSelection(searchCursor.from(), searchCursor.to());
+    editor.scrollIntoView({from:searchCursor.from(), to:searchCursor.to()}, 20);
+    highlightCurrent(searchCursor.from(), searchCursor.to());
+    calculateCurrentIndex(editor, query, searchCursor.from());
+  }
+}
+function calculateCurrentIndex(editor, query, pos) {
+  let idx = 0;
+  let tempCursor = editor.getSearchCursor(query);
+  while(tempCursor.findNext()) {
+    idx++;
+    if (tempCursor.from().line === pos.line && tempCursor.from().ch === pos.ch) { updateSearchUI(idx); return; }
+  }
+}
+
+tabBar.addEventListener("dragstart", (e) => { if (e.target.classList.contains("tab")) { draggedTab = e.target; setTimeout(() => draggedTab.classList.add("dragging"), 0); } });
+tabBar.addEventListener("dragend", () => { if (draggedTab) { draggedTab.classList.remove("dragging"); draggedTab = null; updateTabsArrayOrder(); if (currentTab >= 0) { const active = tabs[currentTab].element; currentTab = tabs.findIndex(t => t.element === active); } saveTabsToStorage(); } });
+tabBar.addEventListener("dragover", (e) => { e.preventDefault(); const dragging = document.querySelector(".dragging"); if (!dragging) return; handleAutoScroll(e.clientX); const afterElement = getDragAfterElement(tabBar, e.clientX); if (afterElement == null) tabBar.insertBefore(dragging, document.getElementById("newTabBtn")); else tabBar.insertBefore(dragging, afterElement); });
+function getDragAfterElement(container, x) { const draggableElements = [...container.querySelectorAll(".tab:not(.dragging)")]; return draggableElements.reduce((closest, child) => { const box = child.getBoundingClientRect(); const offset = x - box.left - box.width / 2; if (offset < 0 && offset > closest.offset) return { offset: offset, element: child }; else return closest; }, { offset: Number.NEGATIVE_INFINITY }).element; }
+function updateTabsArrayOrder() { const tabElements = [...document.querySelectorAll("#tabBar .tab")]; const newTabsArray = []; tabElements.forEach(tabElement => { const tabObject = tabs.find(t => t.element === tabElement); if (tabObject) newTabsArray.push(tabObject); }); tabs = newTabsArray; }
+tabBar.addEventListener("touchstart", (e) => { const targetTab = e.target.closest(".tab"); if (!targetTab || e.target.classList.contains("close-btn") || e.target.tagName === 'INPUT') return; startX = e.touches[0].clientX; startY = e.touches[0].clientY; if (isDraggingMobile) return; touchTimer = setTimeout(() => { isDraggingMobile = true; draggedTab = targetTab; draggedTab.classList.add("dragging"); }, 300); }, { passive: true }); 
+tabBar.addEventListener("touchmove", (e) => { const currentX = e.touches[0].clientX; const currentY = e.touches[0].clientY; const dx = Math.abs(currentX - startX); const dy = Math.abs(currentY - startY); if (!isDraggingMobile) { if (touchTimer && (dx > DRAG_THRESHOLD || dy > DRAG_THRESHOLD)) { clearTimeout(touchTimer); touchTimer = null; return; } return; } e.preventDefault(); if (!draggedTab) return; handleAutoScroll(currentX); const afterElement = getDragAfterElement(tabBar, currentX); if (afterElement == null) tabBar.insertBefore(draggedTab, document.getElementById("newTabBtn")); else tabBar.insertBefore(draggedTab, afterElement); }, { passive: false }); 
+tabBar.addEventListener("touchend", (e) => { if (touchTimer) { clearTimeout(touchTimer); touchTimer = null; } if (isDraggingMobile && draggedTab) { draggedTab.classList.remove("dragging"); updateTabsArrayOrder(); if (currentTab >= 0) { const active = tabs[currentTab].element; currentTab = tabs.findIndex(t => t.element === active); } saveTabsToStorage(); } isDraggingMobile = false; draggedTab = null; });
+
+loadTabsFromStorage();
+</script>
+</body>
+</html>
